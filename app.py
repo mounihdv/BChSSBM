@@ -79,9 +79,20 @@ if analysis_mode == "Dynamics":
 
         st.subheader("Spatiotemporal Heatmap")
         fig2, ax2 = plt.subplots()
-        im = ax2.imshow(m_hist.T, aspect='auto', cmap='coolwarm', vmin=-1, vmax=1)
+        
+        im = ax2.imshow(
+            m_hist.T, 
+            aspect='auto', 
+            cmap='coolwarm', 
+            vmin=-1, 
+            vmax=1, 
+            interpolation='nearest'
+        )
+        ax2.set_yticks(range(c_slider))
+        ax2.set_yticklabels(range(c_slider))
         plt.colorbar(im, label="Group Magnetizations ($m_g$)", ax=ax2)
-        ax2.set_xlabel("Time Steps"); ax2.set_ylabel("Groups ($g$)")
+        ax2.set_xlabel("Time Steps")
+        ax2.set_ylabel("Group Index ($g$)")
         st.pyplot(fig2)
 
     with col2:
