@@ -43,33 +43,39 @@ def run_bchs(c, a, p, steps, init_type, custom_ratio=0.5):
         
     return m_hist, {"global": g_list, "polar": p_list, "var": v_list}
 
-# --- 2. Sidebar & Navigation ---
+# --- 2. Sidebar & Global Settings ---
 st.sidebar.title("🔬 BChS Model Controls")
+
+# Global Settings for both modes
+c = st.sidebar.slider("Number of Groups (c)", 2, 20, 6, step=2)
+a_current = st.sidebar.slider("Global Self-mixing (a)", 0.5, 1.0, 0.9)
+
+st.sidebar.subheader("Global Initial Conditions")
+init_type = st.sidebar.selectbox("Initial State", 
+    ["Anti-Symmetric (Balanced)", "Symmetric (All +1)", "Disordered (Noise)", "Custom Ratio"])
+
+custom_ratio = 0.5
+if init_type == "Custom Ratio":
+    custom_ratio = st.sidebar.slider("Ratio of +ve groups", 0.0, 1.0, 0.5)
+
+st.sidebar.divider()
 analysis_mode = st.sidebar.radio("Navigation", ["Live Dynamics", "Phase Space Explorer"])
 
-c = st.sidebar.slider("Number of Groups (c)", 2, 20, 6, step=2)
-a = st.sidebar.slider("Self-mixing (a)", 0.5, 1.0, 0.9)
-
+# --- 3. Live Dynamics Mode ---
 if analysis_mode == "Live Dynamics":
     st.title("Network Dynamics & Trajectories")
     p = st.sidebar.slider("Contrarian Prob (p)", 0.0, 0.5, 0.1)
-    init_type = st.sidebar.selectbox("Initial Condition", ["Anti-Symmetric (Balanced)", "Symmetric (All +1)", "Disordered (Noise)", "Custom Ratio"])
-    custom_ratio = 0.5
-    if init_type == "Custom Ratio":
-        custom_ratio = st.sidebar.slider("Ratio of +ve groups", 0.0, 1.0, 0.5)
+    
+    m_hist, ops = run_bchs(c, a_current, p, 1000, init_type, custom_ratio)
 
-    m_hist, ops = run_bchs(c, a, p, 1000, init_type, custom_ratio)
-
-    # --- Data Export ---
+    # Data Export
     df_export = pd.DataFrame(m_hist, columns=[f"Group_{i}" for i in range(c)])
     df_export["Global_Mag"] = ops["global"]
     df_export["Polarization"] = ops["polar"]
     df_export["Variance"] = ops["var"]
-    
     csv = df_export.to_csv(index=False).encode('utf-8')
-    st.sidebar.download_button("📥 Download Simulation Data", data=csv, file_name="bchs_results.csv", mime="text/csv")
+    st.sidebar.download_button("📥 Download Data", data=csv, file_name="bchs_results.csv", mime="text/csv")
 
-    # --- Plotting ---
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Magnetization Evolution ($m_g$)")
@@ -89,9 +95,8 @@ if analysis_mode == "Live Dynamics":
 
     with col2:
         st.subheader("Order Parameter Trajectories")
-        
         fig3, ax3 = plt.subplots()
-        ax3.plot(ops["global"], label="Global $|⟨m_g⟩|$", lw=2)
+        ax3.plot(ops["global"], label="Global $|⟨m_g⟩|$ (Consensus)", lw=2)
         ax3.plot(ops["polar"], label="Polarization $⟨|m_g|⟩$", lw=2)
         ax3.plot(ops["var"], label="Variance $Var(m_g)$", lw=2, ls='--')
         ax3.set_ylim(-0.05, 1.05)
@@ -99,13 +104,14 @@ if analysis_mode == "Live Dynamics":
         ax3.grid(True, alpha=0.2)
         st.pyplot(fig3)
 
+# --- 4. Phase Space Explorer Mode ---
 else:
-    # --- Phase Space Plotting ---
-    st.title("Bifurcation & Phase Space Analysis")
+    st.title("Phase Boundary Analysis")
+    st.info(f"Currently scanning phase space using **{init_type}** initialization.")
     
     p_min, p_max = st.sidebar.slider("P-range", 0.0, 1.0, (0.0, 0.4))
     a_min, a_max = st.sidebar.slider("A-range", 0.0, 1.0, (0.5, 1.0))
-    res = st.sidebar.number_input("Resolution (NxN)", 10, 50, 20)
+    res = st.sidebar.number_input("Resolution (NxN Grid)", 10, 50, 20)
     
     if st.button("🚀 Calculate Phase Maps"):
         ps = np.linspace(p_min, p_max, res)
@@ -115,7 +121,8 @@ else:
         progress = st.progress(0)
         for i, pv in enumerate(ps):
             for j, av in enumerate(as_):
-                _, op = run_bchs(c, av, pv, 800, "Anti-Symmetric (Balanced)")
+                # Now uses the GLOBAL init_type and custom_ratio selected in sidebar
+                _, op = run_bchs(c, av, pv, 800, init_type, custom_ratio)
                 g_map[i, j] = op["global"][-1]
                 p_map[i, j] = op["polar"][-1]
                 v_map[i, j] = op["var"][-1]
@@ -123,7 +130,7 @@ else:
             
         fig_p, axs = plt.subplots(1, 3, figsize=(18, 5))
         maps = [g_map, p_map, v_map]
-        titles = ["Global Consensus", "Polarization", "Variance"]
+        titles = ["Global Consensus Map", "Polarization Map", "Variance Map"]
         
         # Overlay Theoretical Line
         a_theory = np.linspace(a_min, a_max, 100)
