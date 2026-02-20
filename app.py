@@ -49,24 +49,20 @@ def run_bchs(c, a, p, steps, init_type, pos_count=None):
 
 # --- 2. Sidebar Controls ---
 st.sidebar.title("🔬 BChS Model Controls")
-
-# Mode selection first for conditional logic
 analysis_mode = st.sidebar.radio("Navigation", ["Live Dynamics", "Phase Space Explorer"])
 
 c = st.sidebar.slider("Number of Groups (c)", 2, 30, 6, step=2)
 
-# Global IC settings
 st.sidebar.subheader("Initial Conditions")
 init_options = ["Anti-Symmetric (Balanced)", "Symmetric (All +1)", "Disordered (Noise)", "Custom Count"]
 init_type = st.sidebar.selectbox("Initial State", init_options)
 
 pos_count = None
 if init_type == "Custom Count":
-    # Discrete integer slider for group count
     pos_count = st.sidebar.slider("Number of Positive Groups", 0, c, c//2)
 
-# Conditional a-slider for Live Dynamics only
-a_val = 0.9 # Default for phase explorer (which scans a anyway)
+# Conditional logic for sliders
+a_val = 0.9 
 if analysis_mode == "Live Dynamics":
     st.sidebar.divider()
     a_val = st.sidebar.slider("Self-mixing (a)", 0.0, 1.0, 0.9)
@@ -76,7 +72,6 @@ if analysis_mode == "Live Dynamics":
 # --- 3. Live Dynamics Mode ---
 if analysis_mode == "Live Dynamics":
     st.title("Network Dynamics & Trajectories")
-    
     m_hist, ops = run_bchs(c, a_val, p_val, steps, init_type, pos_count)
 
     col1, col2 = st.columns(2)
@@ -97,7 +92,6 @@ if analysis_mode == "Live Dynamics":
 
     with col2:
         st.subheader("Order Parameter Trajectories")
-        
         fig3, ax3 = plt.subplots()
         ax3.plot(ops["global"], label="Global Consensus $|⟨m_g⟩|$")
         ax3.plot(ops["polar"], label="Polarization $⟨|m_g|⟩$")
@@ -130,27 +124,39 @@ else:
         g_map, p_map, v_map, ps, as_ = st.session_state['phase_data']
         fig_p, axs = plt.subplots(1, 3, figsize=(18, 5))
         
-        # Boundaries logic
-        a_theory = np.linspace(max(a_min, 0.01), a_max, 100)
+        # --- Fixed Boundary Calculation with Limits ---
+        a_theory = np.linspace(0.0, 1.0, 200)
         lam = (a_theory * c - 1) / (c - 1)
-        p_green = 0.5 * (1 - 1/(2 * np.maximum(lam, 0.501)))
+        
+        # Existence (Green) - Clipped at 0
+        p_green = 0.5 * (1 - 1/(2 * np.maximum(lam, 1e-9)))
+        p_green = np.clip(p_green, 0, 1)
 
+        # Stability (Blue) - Clipped at 0
         def get_p_stable(a_v, c_v):
-            if a_v <= 1/c_v: return 0.0 # No modular state possible
+            if a_v <= 1/c_v: return 0.0 
             alpha_eff = (c_v * (1-a_v)) / (2 * (c_v-1))
             lam_v = (a_v * c_v - 1) / (c_v - 1)
             coeffs = [2*(1-alpha_eff), (1-6*alpha_eff), -(1-2*alpha_eff)]
             roots = np.roots(coeffs)
-            q_c = np.max(roots)
-            return 0.5 * (1 - q_c / lam_v)
+            q_c = np.max(roots[np.isreal(roots)].real)
+            return np.clip(0.5 * (1 - q_c / lam_v), 0, 1)
 
         p_blue = [get_p_stable(val, c) for val in a_theory]
 
         for i, (m, t) in enumerate(zip([g_map, p_map, v_map], ["Consensus", "Polarization", "Variance"])):
             im = axs[i].imshow(m, origin='lower', extent=[a_min, a_max, p_min, p_max], aspect='auto', cmap='inferno')
+            
+            # Draw boundaries only where they are within the user's p-view
             axs[i].plot(a_theory, p_green, color='lime', lw=2, ls='--', label='Existence')
             axs[i].plot(a_theory, p_blue, color='dodgerblue', lw=2, label='Stability')
-            axs[i].set_title(t); plt.colorbar(im, ax=axs[i])
+            
+            # FORCE LIMITS to user selection
+            axs[i].set_xlim(a_min, a_max)
+            axs[i].set_ylim(p_min, p_max)
+            
+            axs[i].set_title(t)
+            plt.colorbar(im, ax=axs[i])
             if i == 0: axs[i].legend(loc='upper left', fontsize='small')
             
         st.pyplot(fig_p)
